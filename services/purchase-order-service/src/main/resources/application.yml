@@ -1,0 +1,82 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: purchase-order-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:purchase_order_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:po_user}
+    password: ${DB_PASSWORD:po_pass}
+    hikari:
+      maximum-pool-size: 10
+      initialization-fail-timeout: 60000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:spendwise}
+    password: ${RABBITMQ_PASSWORD:spendwise_pass}
+    publisher-confirm-type: simple
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+spendwise:
+  services:
+    supplier-url: ${SUPPLIER_SERVICE_URL:http://localhost:3001}
+    budget-url: ${BUDGET_SERVICE_URL:http://localhost:3004}
+  http:
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000          # 3s request timeout for the budget dependency
+  messaging:
+    exchange: spendwise.events
+  outbox:
+    poll-interval-ms: 2000
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      budgetService:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  timelimiter:
+    instances:
+      budgetService:
+        timeoutDuration: 3s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    rabbit:
+      enabled: false
+
+logging:
+  level:
+    com.spendwise: INFO
+    io.github.resilience4j: INFO

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: spendwise
+  labels: { app: frontend }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend, tier: edge }
+    spec:
+      containers:
+        - name: frontend
+          image: spendwise/spendwise-frontend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 80 }]
+          env:
+            - { name: NGINX_RESOLVER, valueFrom: { configMapKeyRef: { name: spendwise-config, key: NGINX_RESOLVER } } }
+            - { name: GATEWAY_UPSTREAM, valueFrom: { configMapKeyRef: { name: spendwise-config, key: GATEWAY_UPSTREAM } } }
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { memory: 32Mi, cpu: 50m }
+            limits: { memory: 128Mi, cpu: 250m }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: spendwise
+spec:
+  type: NodePort
+  selector: { app: frontend }
+  ports: [{ port: 80, targetPort: 80, nodePort: 30000 }]

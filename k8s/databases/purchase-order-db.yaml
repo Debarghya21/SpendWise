@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: purchase-order-db
+  namespace: spendwise
+spec:
+  serviceName: purchase-order-db
+  replicas: 1
+  selector:
+    matchLabels: { app: purchase-order-db }
+  template:
+    metadata:
+      labels: { app: purchase-order-db, tier: database }
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports: [{ containerPort: 3306 }]
+          env:
+            - { name: MYSQL_DATABASE, valueFrom: { configMapKeyRef: { name: spendwise-config, key: PO_DB_NAME } } }
+            - { name: MYSQL_USER, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: PO_DB_USER } } }
+            - { name: MYSQL_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: PO_DB_PASSWORD } } }
+            - { name: MYSQL_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: PO_DB_ROOT_PASSWORD } } }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD --silent"] }
+            initialDelaySeconds: 20
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/mysql }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: purchase-order-db
+  namespace: spendwise
+spec:
+  selector: { app: purchase-order-db }
+  ports: [{ port: 3306, targetPort: 3306 }]

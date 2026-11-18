@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: analytics-db
+  namespace: spendwise
+spec:
+  serviceName: analytics-db
+  replicas: 1
+  selector:
+    matchLabels: { app: analytics-db }
+  template:
+    metadata:
+      labels: { app: analytics-db, tier: database }
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7
+          ports: [{ containerPort: 27017 }]
+          env:
+            - { name: MONGO_INITDB_ROOT_USERNAME, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: ANALYTICS_DB_USER } } }
+            - { name: MONGO_INITDB_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: ANALYTICS_DB_PASSWORD } } }
+            - { name: MONGO_INITDB_DATABASE, valueFrom: { configMapKeyRef: { name: spendwise-config, key: ANALYTICS_DB_NAME } } }
+          readinessProbe:
+            exec: { command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data/db }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-db
+  namespace: spendwise
+spec:
+  selector: { app: analytics-db }
+  ports: [{ port: 27017, targetPort: 27017 }]

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: budget-db
+  namespace: spendwise
+spec:
+  serviceName: budget-db
+  replicas: 1
+  selector:
+    matchLabels: { app: budget-db }
+  template:
+    metadata:
+      labels: { app: budget-db, tier: database }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, valueFrom: { configMapKeyRef: { name: spendwise-config, key: BUDGET_DB_NAME } } }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: BUDGET_DB_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: BUDGET_DB_PASSWORD } } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: budget-db
+  namespace: spendwise
+spec:
+  selector: { app: budget-db }
+  ports: [{ port: 5432, targetPort: 5432 }]

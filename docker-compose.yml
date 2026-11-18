@@ -1,0 +1,254 @@
+name: spendwise
+
+# SpendWise - Intelligent Procurement & Spend Management
+# One command:  docker compose up --build
+
+x-node-healthcheck: &node-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 15s
+
+services:
+  # ---------------------------------------------------------------- Databases
+  supplier-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${SUPPLIER_DB_NAME:-supplier_db}
+      POSTGRES_USER: ${SUPPLIER_DB_USER:-supplier_user}
+      POSTGRES_PASSWORD: ${SUPPLIER_DB_PASSWORD:-supplier_pass}
+    ports:
+      - "5433:5432"
+    volumes:
+      - supplier_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  purchase-order-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${PO_DB_NAME:-purchase_order_db}
+      MYSQL_USER: ${PO_DB_USER:-po_user}
+      MYSQL_PASSWORD: ${PO_DB_PASSWORD:-po_pass}
+      MYSQL_ROOT_PASSWORD: ${PO_DB_ROOT_PASSWORD:-root_pass}
+    ports:
+      - "3307:3306"
+    volumes:
+      - purchase_order_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  budget-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${BUDGET_DB_NAME:-budget_db}
+      POSTGRES_USER: ${BUDGET_DB_USER:-budget_user}
+      POSTGRES_PASSWORD: ${BUDGET_DB_PASSWORD:-budget_pass}
+    ports:
+      - "5434:5432"
+    volumes:
+      - budget_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  analytics-db:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${ANALYTICS_DB_USER:-analytics_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${ANALYTICS_DB_PASSWORD:-analytics_pass}
+      MONGO_INITDB_DATABASE: ${ANALYTICS_DB_NAME:-analytics_db}
+    ports:
+      - "27018:27017"
+    volumes:
+      - analytics_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- Messaging
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-spendwise}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-spendwise_pass}
+    ports:
+      - "15672:15672"   # management UI
+      - "5672:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- Services
+  supplier-service:
+    build: ./services/supplier-service
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-supplier:${APP_VERSION:-1.0.0}
+    environment:
+      PORT: 3001
+      DB_HOST: supplier-db
+      DB_PORT: 5432
+      DB_NAME: ${SUPPLIER_DB_NAME:-supplier_db}
+      DB_USER: ${SUPPLIER_DB_USER:-supplier_user}
+      DB_PASSWORD: ${SUPPLIER_DB_PASSWORD:-supplier_pass}
+    depends_on:
+      supplier-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      <<: *node-healthcheck
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  budget-service:
+    build: ./services/budget-service
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-budget:${APP_VERSION:-1.0.0}
+    environment:
+      PORT: 3004
+      DB_HOST: budget-db
+      DB_PORT: 5432
+      DB_NAME: ${BUDGET_DB_NAME:-budget_db}
+      DB_USER: ${BUDGET_DB_USER:-budget_user}
+      DB_PASSWORD: ${BUDGET_DB_PASSWORD:-budget_pass}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-spendwise}:${RABBITMQ_PASSWORD:-spendwise_pass}@rabbitmq:5672
+    depends_on:
+      budget-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3004/health"]
+      <<: *node-healthcheck
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  purchase-order-service:
+    build: ./services/purchase-order-service
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-purchase-order:${APP_VERSION:-1.0.0}
+    environment:
+      SERVER_PORT: 8082
+      DB_HOST: purchase-order-db
+      DB_PORT: 3306
+      DB_NAME: ${PO_DB_NAME:-purchase_order_db}
+      DB_USER: ${PO_DB_USER:-po_user}
+      DB_PASSWORD: ${PO_DB_PASSWORD:-po_pass}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-spendwise}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-spendwise_pass}
+      SUPPLIER_SERVICE_URL: http://supplier-service:3001
+      BUDGET_SERVICE_URL: http://budget-service:3004
+    depends_on:
+      purchase-order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      supplier-service:
+        condition: service_healthy
+      budget-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  spend-analytics-service:
+    build: ./services/spend-analytics-service
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-analytics:${APP_VERSION:-1.0.0}
+    environment:
+      PORT: 8000
+      MONGO_URL: mongodb://${ANALYTICS_DB_USER:-analytics_user}:${ANALYTICS_DB_PASSWORD:-analytics_pass}@analytics-db:27017/?authSource=admin
+      MONGO_DB: ${ANALYTICS_DB_NAME:-analytics_db}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-spendwise}:${RABBITMQ_PASSWORD:-spendwise_pass}@rabbitmq:5672/%2F
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      <<: *node-healthcheck
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- Edge
+  api-gateway:
+    build: ./gateway
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-gateway:${APP_VERSION:-1.0.0}
+    environment:
+      NGINX_RESOLVER: 127.0.0.11
+      SUPPLIER_UPSTREAM: supplier-service:3001
+      PURCHASE_ORDER_UPSTREAM: purchase-order-service:8082
+      BUDGET_UPSTREAM: budget-service:3004
+      ANALYTICS_UPSTREAM: spend-analytics-service:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      supplier-service:
+        condition: service_healthy
+      purchase-order-service:
+        condition: service_healthy
+      spend-analytics-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-frontend:${APP_VERSION:-1.0.0}
+    environment:
+      NGINX_RESOLVER: 127.0.0.11
+      GATEWAY_UPSTREAM: api-gateway:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [spendwise-net]
+    restart: unless-stopped
+
+networks:
+  spendwise-net:
+    driver: bridge
+
+volumes:
+  supplier_data:
+  purchase_order_data:
+  analytics_data:
+  budget_data:
+  rabbitmq_data:

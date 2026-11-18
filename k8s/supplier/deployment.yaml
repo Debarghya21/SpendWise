@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supplier-service
+  namespace: spendwise
+  labels: { app: supplier-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: supplier-service }
+  template:
+    metadata:
+      labels: { app: supplier-service, tier: backend }
+    spec:
+      containers:
+        - name: supplier-service
+          image: spendwise/spendwise-supplier:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 3001 }]
+          env:
+            - { name: PORT, value: "3001" }
+            - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_DB_HOST } } }
+            - { name: DB_NAME, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_DB_NAME } } }
+            - { name: DB_USER, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: SUPPLIER_DB_USER } } }
+            - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: SUPPLIER_DB_PASSWORD } } }
+          readinessProbe:
+            httpGet: { path: /ready, port: 3001 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 3001 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { memory: 128Mi, cpu: 100m }
+            limits: { memory: 256Mi, cpu: 500m }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supplier-service
+  namespace: spendwise
+spec:
+  selector: { app: supplier-service }
+  ports: [{ port: 3001, targetPort: 3001 }]

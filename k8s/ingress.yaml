@@ -1,0 +1,22 @@
+# Requires an NGINX ingress controller:  minikube addons enable ingress
+# Then add "<minikube ip> spendwise.local" to /etc/hosts (or use `minikube tunnel` + 127.0.0.1).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spendwise-ingress
+  namespace: spendwise
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: spendwise.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /health
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: frontend, port: { number: 80 } } }

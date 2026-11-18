@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spendwise-config
+  namespace: spendwise
+data:
+  # ---- Service discovery through Kubernetes DNS (no pod IPs)
+  SUPPLIER_SERVICE_URL: "http://supplier-service:3001"
+  BUDGET_SERVICE_URL: "http://budget-service:3004"
+
+  # ---- Databases
+  SUPPLIER_DB_HOST: "supplier-db"
+  SUPPLIER_DB_NAME: "supplier_db"
+  PO_DB_HOST: "purchase-order-db"
+  PO_DB_NAME: "purchase_order_db"
+  BUDGET_DB_HOST: "budget-db"
+  BUDGET_DB_NAME: "budget_db"
+  ANALYTICS_DB_NAME: "analytics_db"
+
+  # ---- Messaging
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+
+  # ---- API Gateway (NGINX resolves upstreams at request time via CoreDNS)
+  NGINX_RESOLVER: "kube-dns.kube-system.svc.cluster.local"
+  SUPPLIER_UPSTREAM: "supplier-service.spendwise.svc.cluster.local:3001"
+  PURCHASE_ORDER_UPSTREAM: "purchase-order-service.spendwise.svc.cluster.local:8082"
+  BUDGET_UPSTREAM: "budget-service.spendwise.svc.cluster.local:3004"
+  ANALYTICS_UPSTREAM: "spend-analytics-service.spendwise.svc.cluster.local:8000"
+  GATEWAY_UPSTREAM: "api-gateway.spendwise.svc.cluster.local:8080"
