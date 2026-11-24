@@ -1,40 +1,52 @@
 package com.spendwise.client;
 
+import com.spendwise.grpc.supplier.SupplierServiceGrpc;
+import com.spendwise.grpc.supplier.ValidateSupplierRequest;
+import com.spendwise.grpc.supplier.SupplierValidationResponse;
 import com.spendwise.exception.ApiException;
+import io.grpc.ManagedChannel;
+import io.grpc.StatusRuntimeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
-/** Synchronous REST client: PO Service -> Supplier Service (supplier eligibility is needed immediately). */
+/**
+ * Synchronous gRPC client: PO Service -> Supplier Service.
+ * Replaces the former REST-based SupplierClient.
+ */
 @Component
 public class SupplierClient {
 
     private static final Logger log = LoggerFactory.getLogger(SupplierClient.class);
-    private final RestClient restClient;
+    private final SupplierServiceGrpc.SupplierServiceBlockingStub stub;
 
-    public SupplierClient(@Value("${spendwise.services.supplier-url}") String baseUrl,
-                          SimpleClientHttpRequestFactory requestFactory) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
+    public SupplierClient(@Qualifier("supplierChannel") ManagedChannel channel) {
+        this.stub = SupplierServiceGrpc.newBlockingStub(channel);
     }
 
     public SupplierValidation validate(String supplierId) {
         try {
-            SupplierValidation result = restClient.get()
-                    .uri("/api/suppliers/{id}/validate", supplierId)
-                    .retrieve()
-                    .body(SupplierValidation.class);
-            if (result == null) throw new ApiException(HttpStatus.BAD_GATEWAY, "Empty response from Supplier Service");
-            return result;
-        } catch (HttpClientErrorException.NotFound e) {
-            return new SupplierValidation(supplierId, null, null, "NOT_FOUND", false, "Supplier not found");
-        } catch (RestClientException e) {
-            log.warn("Supplier Service call failed: {}", e.getMessage());
+            ValidateSupplierRequest request = ValidateSupplierRequest.newBuilder()
+                    .setSupplierId(supplierId)
+                    .build();
+
+            SupplierValidationResponse resp = stub.validateSupplier(request);
+
+            if ("NOT_FOUND".equals(resp.getStatus())) {
+                return new SupplierValidation(supplierId, null, null, "NOT_FOUND", false, "Supplier not found");
+            }
+            return new SupplierValidation(
+                    resp.getSupplierId(),
+                    resp.getName(),
+                    resp.getCategory(),
+                    resp.getStatus(),
+                    resp.getEligible(),
+                    resp.getReason()
+            );
+        } catch (StatusRuntimeException e) {
+            log.warn("Supplier Service gRPC call failed: {} - {}", e.getStatus().getCode(), e.getMessage());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Supplier validation is temporarily unavailable. Please retry.");
         }

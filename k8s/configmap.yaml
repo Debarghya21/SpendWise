@@ -8,6 +8,10 @@ data:
   SUPPLIER_SERVICE_URL: "http://supplier-service:3001"
   BUDGET_SERVICE_URL: "http://budget-service:3004"
 
+  # ---- gRPC targets (internal service-to-service)
+  SUPPLIER_GRPC_TARGET: "supplier-service:50051"
+  BUDGET_GRPC_TARGET: "budget-service:50052"
+
   # ---- Databases
   SUPPLIER_DB_HOST: "supplier-db"
   SUPPLIER_DB_NAME: "supplier_db"

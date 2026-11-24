@@ -29,6 +29,8 @@ spec:
             - { name: RABBITMQ_PASSWORD, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: RABBITMQ_PASSWORD } } }
             - { name: SUPPLIER_SERVICE_URL, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_SERVICE_URL } } }
             - { name: BUDGET_SERVICE_URL, valueFrom: { configMapKeyRef: { name: spendwise-config, key: BUDGET_SERVICE_URL } } }
+            - { name: SUPPLIER_GRPC_TARGET, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_GRPC_TARGET } } }
+            - { name: BUDGET_GRPC_TARGET, valueFrom: { configMapKeyRef: { name: spendwise-config, key: BUDGET_GRPC_TARGET } } }
           startupProbe:
             httpGet: { path: /actuator/health/liveness, port: 8082 }
             periodSeconds: 5

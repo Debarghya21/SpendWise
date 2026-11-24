@@ -16,9 +16,12 @@ spec:
         - name: supplier-service
           image: spendwise/spendwise-supplier:1.0.0
           imagePullPolicy: IfNotPresent
-          ports: [{ containerPort: 3001 }]
+          ports:
+            - { containerPort: 3001, name: http }
+            - { containerPort: 50051, name: grpc }
           env:
             - { name: PORT, value: "3001" }
+            - { name: GRPC_PORT, value: "50051" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_DB_HOST } } }
             - { name: DB_NAME, valueFrom: { configMapKeyRef: { name: spendwise-config, key: SUPPLIER_DB_NAME } } }
             - { name: DB_USER, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: SUPPLIER_DB_USER } } }
@@ -42,4 +45,6 @@ metadata:
   namespace: spendwise
 spec:
   selector: { app: supplier-service }
-  ports: [{ port: 3001, targetPort: 3001 }]
+  ports:
+    - { port: 3001, targetPort: 3001, name: http }
+    - { port: 50051, targetPort: 50051, name: grpc }

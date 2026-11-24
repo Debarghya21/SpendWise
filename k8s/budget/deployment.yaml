@@ -16,9 +16,12 @@ spec:
         - name: budget-service
           image: spendwise/spendwise-budget:1.0.0
           imagePullPolicy: IfNotPresent
-          ports: [{ containerPort: 3004 }]
+          ports:
+            - { containerPort: 3004, name: http }
+            - { containerPort: 50052, name: grpc }
           env:
             - { name: PORT, value: "3004" }
+            - { name: GRPC_PORT, value: "50052" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: spendwise-config, key: BUDGET_DB_HOST } } }
             - { name: DB_NAME, valueFrom: { configMapKeyRef: { name: spendwise-config, key: BUDGET_DB_NAME } } }
             - { name: DB_USER, valueFrom: { secretKeyRef: { name: spendwise-secrets, key: BUDGET_DB_USER } } }
@@ -43,4 +46,6 @@ metadata:
   namespace: spendwise
 spec:
   selector: { app: budget-service }
-  ports: [{ port: 3004, targetPort: 3004 }]
+  ports:
+    - { port: 3004, targetPort: 3004, name: http }
+    - { port: 50052, targetPort: 50052, name: grpc }

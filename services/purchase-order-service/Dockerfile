@@ -1,9 +1,13 @@
 # ---------- Build stage (JDK 17 + Maven)
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
-COPY pom.xml .
+COPY purchase-order-service/pom.xml .
 RUN mvn -B -q dependency:go-offline
-COPY src ./src
+
+# Copy shared proto definitions into the standard protobuf-maven-plugin location
+COPY proto ./src/main/proto
+
+COPY purchase-order-service/src ./src
 RUN mvn -B -q package -DskipTests
 
 # ---------- Runtime stage (JRE 17 only)

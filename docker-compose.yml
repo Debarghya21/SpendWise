@@ -108,10 +108,13 @@ services:
 
   # ---------------------------------------------------------------- Services
   supplier-service:
-    build: ./services/supplier-service
+    build:
+      context: ./services
+      dockerfile: supplier-service/Dockerfile
     image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-supplier:${APP_VERSION:-1.0.0}
     environment:
       PORT: 3001
+      GRPC_PORT: 50051
       DB_HOST: supplier-db
       DB_PORT: 5432
       DB_NAME: ${SUPPLIER_DB_NAME:-supplier_db}
@@ -127,10 +130,13 @@ services:
     restart: unless-stopped
 
   budget-service:
-    build: ./services/budget-service
+    build:
+      context: ./services
+      dockerfile: budget-service/Dockerfile
     image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-budget:${APP_VERSION:-1.0.0}
     environment:
       PORT: 3004
+      GRPC_PORT: 50052
       DB_HOST: budget-db
       DB_PORT: 5432
       DB_NAME: ${BUDGET_DB_NAME:-budget_db}
@@ -149,7 +155,9 @@ services:
     restart: unless-stopped
 
   purchase-order-service:
-    build: ./services/purchase-order-service
+    build:
+      context: ./services
+      dockerfile: purchase-order-service/Dockerfile
     image: ${DOCKER_NAMESPACE:-spendwise}/spendwise-purchase-order:${APP_VERSION:-1.0.0}
     environment:
       SERVER_PORT: 8082
@@ -164,6 +172,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-spendwise_pass}
       SUPPLIER_SERVICE_URL: http://supplier-service:3001
       BUDGET_SERVICE_URL: http://budget-service:3004
+      SUPPLIER_GRPC_TARGET: supplier-service:50051
+      BUDGET_GRPC_TARGET: budget-service:50052
     depends_on:
       purchase-order-db:
         condition: service_healthy

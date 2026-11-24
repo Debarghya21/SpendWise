@@ -9,6 +9,8 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.12.2",
+    "@grpc/proto-loader": "^0.7.13",
     "amqplib": "^0.10.4",
     "cors": "^2.8.5",
     "express": "^4.21.1",

@@ -32,6 +32,9 @@ spendwise:
   services:
     supplier-url: ${SUPPLIER_SERVICE_URL:http://localhost:3001}
     budget-url: ${BUDGET_SERVICE_URL:http://localhost:3004}
+  grpc:
+    supplier-target: ${SUPPLIER_GRPC_TARGET:localhost:50051}
+    budget-target: ${BUDGET_GRPC_TARGET:localhost:50052}
   http:
     connect-timeout-ms: 2000
     read-timeout-ms: 3000          # 3s request timeout for the budget dependency
@@ -53,8 +56,7 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 2
         automaticTransitionFromOpenToHalfOpenEnabled: true
         recordExceptions:
-          - org.springframework.web.client.ResourceAccessException
-          - org.springframework.web.client.HttpServerErrorException
+          - io.grpc.StatusRuntimeException
   timelimiter:
     instances:
       budgetService:

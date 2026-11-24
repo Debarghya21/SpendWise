@@ -1,5 +1,6 @@
 module.exports = {
   port: parseInt(process.env.PORT || '3001', 10),
+  grpcPort: parseInt(process.env.GRPC_PORT || '50051', 10),
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),
